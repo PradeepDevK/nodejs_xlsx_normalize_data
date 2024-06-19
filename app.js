@@ -34,10 +34,22 @@ if (!fs.existsSync(uploadDirectory)){
     fs.mkdirSync(uploadDirectory, { recursive: true });
 }
 
-// Set up Multer for file uploads
+// Set up Multer for file uploads with dynamic folder creation based on user_email
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, uploadDirectory);
+        const username = req.params.username;
+        if (!username) {
+            return cb(new Error('username is required'), null);
+        }
+
+        const userUploadDirectory = path.join(uploadDirectory, username);
+
+        // Ensure the user-specific directory exists
+        if (!fs.existsSync(userUploadDirectory)){
+            fs.mkdirSync(userUploadDirectory, { recursive: true });
+        }
+
+        cb(null, userUploadDirectory);
     },
     filename: (req, file, cb) => {
         // Use the original filename
@@ -53,7 +65,12 @@ app.get('/', (req, res) => {
 });
 
 // File upload endpoint
-app.post('/upload', upload.single('file'), (req, res) => {
+app.post('/upload/:username', upload.single('file'), (req, res) => {
+
+    if (!req.params.username) {
+        return res.status(400).send('username is required....');
+    }
+
     if (!req.file) {
         return res.status(400).send('No file uploaded.');
     }
@@ -62,11 +79,17 @@ app.post('/upload', upload.single('file'), (req, res) => {
 });
 
 app.post('/process-files', (req, res) => {
-    const {columns} = req.body;
+    const { columns, username } = req.body;
     const jsonResults = [];
     let serialNumber = 1; // Initialize the serial number counter
 
-    fs.readdir(uploadDirectory, (err, files) => {
+    const userUploadDirectory = path.join(uploadDirectory, username);
+
+    if (!fs.existsSync(userUploadDirectory)){
+        return res.status(500).send('Unable to scan directory: ' + err);
+    }
+
+    fs.readdir(userUploadDirectory, (err, files) => {
         if (err) {
             return res.status(500).send('Unable to scan directory: ' + err);
         }
@@ -78,7 +101,7 @@ app.post('/process-files', (req, res) => {
 
         files.forEach((file) => {
             console.log(`Processing file: ${file}`);
-            const filePath = path.join(uploadDirectory, file);
+            const filePath = path.join(userUploadDirectory, file);
             const workbook = xlsx.readFile(filePath);
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName];
@@ -115,7 +138,19 @@ app.post('/process-files', (req, res) => {
             // Write the workbook to a file
             xlsx.writeFile(workbook, filePath);
 
-            res.json(jsonResults);
+            // Send the Excel file back to the client
+            res.download(filePath, 'finalData.xlsx', (err) => {
+                if (err) {
+                    res.status(500).send('Error sending the file: ' + err);
+                }
+
+                // Optionally, delete the file after sending it
+                fs.unlink(filePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting the file: ' + err);
+                    }
+                });
+            });
         } else {
             res.json("No Data Found!");
         }
