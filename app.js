@@ -64,6 +64,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 app.post('/process-files', (req, res) => {
     const {columns} = req.body;
     const jsonResults = [];
+    let serialNumber = 1; // Initialize the serial number counter
 
     fs.readdir(uploadDirectory, (err, files) => {
         if (err) {
@@ -85,7 +86,7 @@ app.post('/process-files', (req, res) => {
 
             if (json.length) {
                 const finalArray = json.map(item => {
-                    let filteredItem = {};
+                    let filteredItem = { SerialNumber: serialNumber++ }; // Add serial number
                     columns.forEach(key => {
                       if (item.hasOwnProperty(key)) {
                         filteredItem[key] = item[key];
