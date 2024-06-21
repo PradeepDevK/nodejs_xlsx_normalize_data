@@ -157,7 +157,22 @@ app.post('/process-files', (req, res) => {
     });
 });
 
+app.post('/deleteDirectory', async (req, res) => {
+    const { username } = req.body;
 
+    const userUploadDirectory = path.join(uploadDirectory, username);
+
+    if (!fs.existsSync(userUploadDirectory)){
+        return res.status(500).send('Unable to scan directory: ' + err);
+    }
+
+    try {
+        await fs.rm(userUploadDirectory, { recursive: true, force: true });
+        return res.send(`Successfully deleted ${userUploadDirectory}`);
+    } catch (error) {
+        return res.status(500).send(`Error while deleting ${userUploadDirectory}.`, error);
+    }
+});
 
 
 const PORT = process.env.PORT || 8000;
